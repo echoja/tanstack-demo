@@ -10,6 +10,8 @@ on:
 permissions:
   contents: read
   packages: write
+  pull-requests: write
+  issues: write
 
 env:
   IMAGE_NAME: ghcr.io/echoja/tanstack-demo
@@ -53,3 +55,82 @@ jobs:
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  preview:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PREVIEW_URL: https://tanstack-demo-pr-${{ github.event.pull_request.number }}.echoja.com
+      ARGOCD_URL: https://argocd.echoja.com/applications/tanstack-demo-pr-${{ github.event.pull_request.number }}
+      MARKER: "<!-- tanstack-demo-preview -->"
+    steps:
+      - name: Wait for preview health
+        id: wait
+        continue-on-error: true
+        shell: bash
+        run: |
+          for attempt in {1..90}; do
+            if curl -fsS --max-time 10 "${PREVIEW_URL}/health" >/dev/null; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              echo "attempt=${attempt}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "attempt=90" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Upsert preview PR comment
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.wait.outputs.ready }}" = "true" ]; then
+            status="Ready"
+            detail="Preview responded on /health after ${{ steps.wait.outputs.attempt }} attempt(s)."
+          else
+            status="Not ready"
+            detail="Preview did not respond on /health before the timeout."
+          fi
+
+          cat > /tmp/preview-comment.md <<EOF
+          ${MARKER}
+          ## Preview deployment
+
+          Status: ${status}
+
+          URL: ${PREVIEW_URL}
+
+          Argo CD: ${ARGOCD_URL}
+
+          Image: ghcr.io/echoja/tanstack-demo:sha-${{ github.event.pull_request.head.sha }}
+
+          ${detail}
+          EOF
+
+          comment_id="$(
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"${MARKER}\"))) | .id" \
+              | head -n 1
+          )"
+
+          if [ -n "${comment_id}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${{ github.repository }}/issues/comments/${comment_id}" \
+              --field body="$(cat /tmp/preview-comment.md)"
+          else
+            gh api \
+              --method POST \
+              "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --field body="$(cat /tmp/preview-comment.md)"
+          fi
+
+      - name: Fail if preview is unavailable
+        if: steps.wait.outputs.ready != 'true'
+        run: exit 1

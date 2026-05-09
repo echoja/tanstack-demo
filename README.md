@@ -56,6 +56,8 @@ ghcr.io/echoja/tanstack-demo:sha-<commit-sha>
 
 Production Kubernetes uses `main`. Pull request previews use `sha-<pull-request-head-sha>`.
 
+Pull request builds also wait for the preview `/health` endpoint and update the PR with the preview URL.
+
 ## Deployment URLs
 
 ```text
