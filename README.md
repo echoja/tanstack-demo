@@ -50,11 +50,11 @@ GitHub Actions publishes:
 
 ```text
 ghcr.io/echoja/tanstack-demo:main
-ghcr.io/echoja/tanstack-demo:sha-<short-sha>
 ghcr.io/echoja/tanstack-demo:pr-<pull-request-number>
+ghcr.io/echoja/tanstack-demo:sha-<commit-sha>
 ```
 
-Production Kubernetes uses `main`. Pull request previews use `pr-<number>`.
+Production Kubernetes uses `main`. Pull request previews use `sha-<pull-request-head-sha>`.
 
 ## Deployment URLs
 
