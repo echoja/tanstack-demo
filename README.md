@@ -60,6 +60,6 @@ Production Kubernetes uses `main`. Pull request previews use `sha-<pull-request-
 
 ```text
 Production: https://tanstack-demo.echoja.com
-Preview:    https://pr-<number>.tanstack-demo.echoja.com
+Preview:    https://tanstack-demo-pr-<number>.echoja.com
 Health:     /health
 ```
