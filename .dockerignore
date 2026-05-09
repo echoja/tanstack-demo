@@ -1,0 +1,10 @@
+node_modules
+.output
+.vite
+data
+*.log
+.git
+.env.local
+.env
+Dockerfile
+docker-compose.yml

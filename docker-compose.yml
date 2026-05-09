@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    image: ghcr.io/echoja/tanstack-demo:local
+    container_name: tanstack-demo
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:37291:37291"
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: production
+      PORT: "37291"
+      HOST: "0.0.0.0"
+      DATABASE_URL: postgres://tanstack_demo:tanstack_demo@postgres:5432/tanstack_demo
+      BETTER_AUTH_URL: https://tanstack-demo.echoja.com
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tanstack_demo
+      POSTGRES_USER: tanstack_demo
+      POSTGRES_PASSWORD: tanstack_demo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tanstack_demo -d tanstack_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
