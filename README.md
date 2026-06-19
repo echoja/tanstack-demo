@@ -58,6 +58,9 @@ Production Kubernetes uses `main`. Pull request previews use `sha-<pull-request-
 
 Pull request builds also wait for the preview `/health` endpoint and update the PR with the preview URL.
 
+Preview smoke-test marker: 2026-05-10.
+Preview smoke-test marker 2: 2026-05-10.
+
 ## Deployment URLs
 
 ```text
