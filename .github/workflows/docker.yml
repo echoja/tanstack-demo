@@ -134,3 +134,87 @@ jobs:
       - name: Fail if preview is unavailable
         if: steps.wait.outputs.ready != 'true'
         run: exit 1
+
+  update-infra:
+    needs: build
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tanstack-demo-infra-update
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Check that this build is still main
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)"
+          echo "current=$([[ "$latest" == "$GITHUB_SHA" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Create infra GitHub App token
+        if: steps.current.outputs.current == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.INFRA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.INFRA_APP_PRIVATE_KEY }}
+          owner: echoja
+          repositories: infra
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout infra
+        if: steps.current.outputs.current == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: echoja/infra
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Open image update PR
+        if: steps.current.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          export IMAGE_TAG="sha-${GITHUB_SHA::7}"
+          branch="bot/update-tanstack-demo-${GITHUB_SHA}"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          path = Path('apps/tanstack-demo/values.yaml')
+          content, count = re.subn(r'(?m)^  tag: sha-[0-9a-f]+$', '  tag: ' + os.environ['IMAGE_TAG'], path.read_text())
+          if count != 1:
+              raise SystemExit('Expected exactly one pinned image tag')
+          path.write_text(content)
+          PY
+          if git diff --quiet -- apps/tanstack-demo/values.yaml; then
+            echo "Infra already uses ${IMAGE_TAG}."
+            exit 0
+          fi
+          user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          gh auth setup-git
+          if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git checkout -b "$branch"
+            git add apps/tanstack-demo/values.yaml
+            git commit -m "Update TanStack Demo image to ${IMAGE_TAG}"
+            git push origin "$branch"
+          fi
+          existing="$(gh pr list --repo echoja/infra --head "$branch" --state all --json number --jq 'length')"
+          if [ "$existing" = 0 ]; then
+            cat > /tmp/infra-pr-body.md <<BODY
+          Updates TanStack Demo to \`${IMAGE_TAG}\` after the successful build of https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}.
+
+          Merging this PR triggers Argo CD auto-sync, including the database migration and deployment rollout.
+          BODY
+            gh pr create --repo echoja/infra --base main --head "$branch" \
+              --title "Update TanStack Demo image to ${IMAGE_TAG}" --body-file /tmp/infra-pr-body.md
+          fi
