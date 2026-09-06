@@ -13,6 +13,8 @@ TanStack Start demo app for `tanstack-demo.echoja.com`.
 
 ## Local Development
 
+Use Node.js 24 LTS and pnpm 12.3.4 (pinned in `package.json`).
+
 ```bash
 pnpm install
 cp .env.example .env.local

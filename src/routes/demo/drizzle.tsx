@@ -118,11 +118,10 @@ function DemoDrizzle() {
             type="text"
             name="title"
             placeholder="Add a new todo..."
-            className="flex-1 px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 transition-all text-white placeholder-indigo-300/50"
+            className="flex-1 px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-[rgba(93,103,227,0.5)] transition-all text-white placeholder-indigo-300/50"
             style={{
               background: 'rgba(93, 103, 227, 0.1)',
               borderColor: 'rgba(93, 103, 227, 0.3)',
-              focusRing: 'rgba(93, 103, 227, 0.5)',
             }}
           />
           <button
