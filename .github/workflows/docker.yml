@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: echoja-tanstack-demo-linux
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,11 +55,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 20
 
   preview:
-    runs-on: ubuntu-latest
+    runs-on: echoja-tanstack-demo-linux
     needs: build
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -134,13 +136,13 @@ jobs:
       - name: Fail if preview is unavailable
         if: steps.wait.outputs.ready != 'true'
         run: exit 1
+    timeout-minutes: 20
 
   update-infra:
     needs: build
     if: >-
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')
+    runs-on: echoja-tanstack-demo-linux
     concurrency:
       group: tanstack-demo-infra-update
       cancel-in-progress: false
@@ -218,3 +220,4 @@ jobs:
             gh pr create --repo echoja/infra --base main --head "$branch" \
               --title "Update TanStack Demo image to ${IMAGE_TAG}" --body-file /tmp/infra-pr-body.md
           fi
+    timeout-minutes: 20
