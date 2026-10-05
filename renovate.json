@@ -2,5 +2,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "internalChecksFilter": "strict",
+  "packageRules": [
+    {
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "7 days",
+      "minimumReleaseAgeBuffer": "1 hour"
+    }
   ]
 }

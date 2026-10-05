@@ -55,16 +55,52 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     timeout-minutes: 20
 
-  preview:
+  publish-preview:
     runs-on: echoja-tanstack-demo-linux
     needs: build
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 5
+    concurrency:
+      group: tanstack-demo-preview-publication-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Create infra GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.INFRA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.INFRA_APP_PRIVATE_KEY }}
+          owner: echoja
+          repositories: infra
+          permission-contents: write
+
+      - name: Record published preview image
+        id: publish
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_SOURCE_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 .github/scripts/publish-preview.py
+
+  preview:
+    runs-on: echoja-tanstack-demo-linux
+    needs: publish-preview
+    if: needs.publish-preview.outputs.published == 'true'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PREVIEW_URL: https://tanstack-demo-pr-${{ github.event.pull_request.number }}.echoja.com
       ARGOCD_URL: https://argocd.echoja.com/applications/tanstack-demo-pr-${{ github.event.pull_request.number }}
       MARKER: "<!-- tanstack-demo-preview -->"
+      EXPECTED_IMAGE_TAG: sha-${{ github.event.pull_request.head.sha }}
     steps:
       - name: Wait for preview health
         id: wait
@@ -72,7 +108,8 @@ jobs:
         shell: bash
         run: |
           for attempt in {1..90}; do
-            if curl -fsS --max-time 10 "${PREVIEW_URL}/health" >/dev/null; then
+            if curl -fsS --max-time 10 -D - -o /dev/null "${PREVIEW_URL}/health" \
+              | tr -d '\r' | grep -Fxiq "x-preview-image-tag: ${EXPECTED_IMAGE_TAG}"; then
               echo "ready=true" >> "$GITHUB_OUTPUT"
               echo "attempt=${attempt}" >> "$GITHUB_OUTPUT"
               exit 0
@@ -91,10 +128,10 @@ jobs:
         run: |
           if [ "${{ steps.wait.outputs.ready }}" = "true" ]; then
             status="Ready"
-            detail="Preview responded on /health after ${{ steps.wait.outputs.attempt }} attempt(s)."
+            detail="Published image responded on /health after ${{ steps.wait.outputs.attempt }} attempt(s)."
           else
             status="Not ready"
-            detail="Preview did not respond on /health before the timeout."
+            detail="Published image did not respond on /health before the timeout."
           fi
 
           cat > /tmp/preview-comment.md <<EOF

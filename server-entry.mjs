@@ -78,6 +78,8 @@ createServer(async (req, res) => {
 
     if (path === '/health') {
       res.setHeader('content-type', 'text/plain; charset=utf-8')
+      res.setHeader('cache-control', 'no-store')
+      res.setHeader('x-preview-image-tag', process.env.APP_IMAGE_TAG ?? '')
       return res.end('ok')
     }
 
