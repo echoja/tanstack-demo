@@ -2,7 +2,7 @@
   "name": "tanstack-demo",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.28.4",
+  "packageManager": "pnpm@12.3.4",
   "imports": {
     "#/*": "./src/*"
   },
